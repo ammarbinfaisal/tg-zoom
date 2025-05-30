@@ -323,7 +323,7 @@ The bot will automatically download and store recordings for easy access!
       const outputPath = path.join(this.downloadsDir, filename);
 
       // Use yt-dlp to download
-      const command = `yt-dlp --video-password "${record.passcode}" -o "${outputPath}.%(ext)s" "${record.zoomUrl}"`;
+      const command = `${process.env.YT_DLP_PATH} --video-password "${record.passcode}" -o "${outputPath}.%(ext)s" "${record.zoomUrl}"`;
 
       await this.bot.sendMessage(chatId, '⬇️ Downloading recording...');
 
