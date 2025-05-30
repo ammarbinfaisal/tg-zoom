@@ -3,7 +3,8 @@ import { createClient } from '@libsql/client';
 import path from 'path';
 
 // Get the database URL from environment variables or use a default
-const dbUrl = process.env.DATABASE_URL || path.resolve(process.cwd(), '../zoom_bot.db');
+const dbPath = path.resolve(process.cwd(), '../zoom_bot.db');
+const dbUrl = process.env.DATABASE_URL || `file:${dbPath}`;
 
 // Create a database client
 const client = createClient({

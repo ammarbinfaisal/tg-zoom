@@ -62,7 +62,8 @@ class ZoomTelegramBot {
   }
 
   private async initializeDatabase() {
-    const dbUrl = process.env.DATABASE_URL || 'file:zoom_bot.db';
+    const dbPath = path.resolve(__dirname, 'zoom_bot.db');
+    const dbUrl = process.env.DATABASE_URL || `file:${dbPath}`;
     const client = createClient({
       url: dbUrl,
     });
