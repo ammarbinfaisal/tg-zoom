@@ -8,7 +8,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import crypto from 'crypto';
-import { users, zoomRecords } from './src/schema';
+import { users, zoomRecords } from './web/src/lib/schema';
 import "dotenv/config";
 
 interface ZoomLinkData {
@@ -525,14 +525,11 @@ The bot will automatically download and store recordings for easy access!
       });
     }
 
-    this.app.listen(this.port, () => {
+    // Create HTTP server
+    const server = createServer(this.app);
+    server.listen(this.port, () => {
       console.log(`🚀 Bot server running on port ${this.port}`);
       console.log(`📡 Mode: ${this.useWebhook ? 'Webhook' : 'Polling'}`);
-    });
-  }
-
-  public start() {
-    console.log('🤖 Telegram Zoom Bot started!');
     console.log(`📡 Running in ${this.useWebhook ? 'webhook' : 'polling'} mode`);
     if (this.useWebhook && this.webhookUrl) {
       console.log(`🔗 Webhook URL: ${this.webhookUrl}`);

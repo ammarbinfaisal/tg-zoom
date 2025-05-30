@@ -1,4 +1,3 @@
-// src/schema.ts
 import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
