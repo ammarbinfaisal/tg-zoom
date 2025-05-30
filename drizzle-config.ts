@@ -1,10 +1,11 @@
 import type { Config } from 'drizzle-kit';
+import "dotenv/config";
 
 export default {
   schema: './src/schema.ts',
   out: './drizzle',
-  driver: 'better-sqlite',
+  dialect: 'sqlite',
   dbCredentials: {
-    url: './zoom_bot.db',
+    url: process.env.DATABASE_URL || 'file:zoom_bot.db',
   },
 } satisfies Config;

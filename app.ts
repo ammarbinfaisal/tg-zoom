@@ -1,7 +1,7 @@
 import express from 'express';
 import TelegramBot from 'node-telegram-bot-api';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
 import { eq, like, desc } from 'drizzle-orm';
 import fs from 'fs/promises';
 import path from 'path';
@@ -61,17 +61,21 @@ class ZoomTelegramBot {
   }
 
   private async initializeDatabase() {
-    const sqlite = new Database('zoom_bot.db');
-    this.db = drizzle(sqlite);
+    const dbUrl = process.env.DATABASE_URL || 'file:zoom_bot.db';
+    const client = createClient({
+      url: dbUrl,
+    });
+    
+    this.db = drizzle(client);
 
-    // Run migrations (you'll need to set up drizzle-kit for this)
-    // For now, we'll create tables manually
-    sqlite.exec(`
+    // Tables are created through migrations using drizzle-kit
+    // If you need to create tables manually, you can use:
+    await client.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         telegram_id INTEGER UNIQUE NOT NULL,
         username TEXT,
-        can_upload BOOLEAN DEFAULT FALSE,
+        can_upload TEXT DEFAULT 'no',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
