@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatDate, formatFileSize } from '@/lib/utils';
-import fs from 'fs/promises';
-import path from 'path';
 
 interface Recording {
   id: number;
