@@ -525,11 +525,6 @@ The bot will automatically download and store recordings for easy access!
         }
       });
     }
-
-    this.app.listen(this.port, () => {
-      console.log(`🚀 Bot server running on port ${this.port}`);
-      console.log(`📡 Mode: ${this.useWebhook ? 'Webhook' : 'Polling'}`);
-    });
   }
 
   public start() {
