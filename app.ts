@@ -28,23 +28,23 @@ class ZoomTelegramBot {
   private allowedUploaders: Set<number> = new Set();
 
   constructor(
-    private botToken: string, 
+    private botToken: string,
     private port: number = 3000,
     private useWebhook: boolean = process.env.NODE_ENV === 'production',
     private webhookUrl?: string
   ) {
     // Initialize bot with polling or webhook based on environment
-    this.bot = new TelegramBot(botToken, { 
+    this.bot = new TelegramBot(botToken, {
       polling: !this.useWebhook,
       webHook: this.useWebhook ? {
         port: this.port,
         host: '0.0.0.0'
       } : false
     });
-    
+
     this.app = express();
     this.downloadsDir = path.join(__dirname, 'downloads');
-    
+
     this.initializeApp();
   }
 
@@ -54,7 +54,7 @@ class ZoomTelegramBot {
     await this.loadAllowedUploaders();
     this.setupBotHandlers();
     this.setupWebServer();
-    
+
     // Set up webhook if in production
     if (this.useWebhook && this.webhookUrl) {
       await this.setupWebhook();
@@ -66,7 +66,7 @@ class ZoomTelegramBot {
     const client = createClient({
       url: dbUrl,
     });
-    
+
     this.db = drizzle(client);
 
     // Tables are created through migrations using drizzle-kit
@@ -108,7 +108,7 @@ class ZoomTelegramBot {
       .select()
       .from(users)
       .where(eq(users.canUpload, "yes"));
-    
+
     this.allowedUploaders = new Set(allowedUsers.map(user => user.telegramId));
   }
 
@@ -231,13 +231,13 @@ The bot will automatically download and store recordings for easy access!
     await this.db.update(users)
       .set({ canUpload: "yes" })
       .where(eq(users.telegramId, telegramId));
-    
+
     this.allowedUploaders.add(telegramId);
   }
 
   private parseZoomMessage(text: string): ZoomLinkData | null {
     const lines = text.split('\n').map(line => line.trim());
-    
+
     let title = '';
     let date = '';
     let url = '';
@@ -245,22 +245,22 @@ The bot will automatically download and store recordings for easy access!
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
+
       // First non-empty line is usually the title
       if (!title && line && !line.includes('Date:') && !line.includes('Duration:') && !line.includes('http')) {
         title = line;
       }
-      
+
       // Look for date
       if (line.includes('Date:')) {
         date = line.replace('Date:', '').trim();
       }
-      
+
       // Look for Zoom URL
       if (line.includes('zoom.us')) {
         url = line;
       }
-      
+
       // Look for passcode
       if (line.includes('Passcode:') || line.includes('Password:')) {
         passcode = line.split(':')[1]?.trim() || '';
@@ -323,42 +323,42 @@ The bot will automatically download and store recordings for easy access!
 
       // Use yt-dlp to download
       const command = `yt-dlp --video-password "${record.passcode}" -o "${outputPath}.%(ext)s" "${record.zoomUrl}"`;
-      
+
       await this.bot.sendMessage(chatId, '⬇️ Downloading recording...');
-      
+
       const { stdout, stderr } = await execAsync(command);
-      
+
       // Find the actual downloaded file
       const files = await fs.readdir(this.downloadsDir);
       const downloadedFile = files.find(file => file.startsWith(filename));
-      
+
       if (downloadedFile) {
         const filePath = path.join(this.downloadsDir, downloadedFile);
-        
+
         // Update database
         await this.db.update(zoomRecords)
-          .set({ 
+          .set({
             filePath,
-            status: 'completed' 
+            status: 'completed'
           })
           .where(eq(zoomRecords.id, record.id));
 
         await this.bot.sendMessage(chatId, '✅ Recording downloaded successfully!');
-        
+
         // Send the file
         await this.sendRecordingFile(chatId, filePath, record.title);
-        
+
       } else {
         throw new Error('Downloaded file not found');
       }
 
     } catch (error) {
       console.error('Download error:', error);
-      
+
       await this.db.update(zoomRecords)
         .set({ status: 'failed' })
         .where(eq(zoomRecords.id, record.id));
-      
+
       await this.bot.sendMessage(chatId, `❌ Download failed: ${error}`);
     }
   }
@@ -369,7 +369,7 @@ The bot will automatically download and store recordings for easy access!
       const fileSizeMB = stats.size / (1024 * 1024);
 
       if (fileSizeMB > 50) { // Telegram's file size limit
-        await this.bot.sendMessage(chatId, `📁 *${title}*\n\n⚠️ File too large for Telegram (${fileSizeMB.toFixed(1)}MB)\nFile saved locally: ${path.basename(filePath)}`, 
+        await this.bot.sendMessage(chatId, `📁 *${title}*\n\n⚠️ File too large for Telegram (${fileSizeMB.toFixed(1)}MB)\nFile saved locally: ${path.basename(filePath)}`,
           { parse_mode: 'Markdown' });
       } else {
         const message = await this.bot.sendDocument(chatId, filePath, {
@@ -405,7 +405,7 @@ The bot will automatically download and store recordings for easy access!
       }
 
       let response = `🔍 *Search Results for "${query}":*\n\n`;
-      
+
       for (const record of records) {
         response += `📁 *${record.title}*\n`;
         response += `📅 ${record.date}\n`;
@@ -447,7 +447,7 @@ The bot will automatically download and store recordings for easy access!
       }
 
       let response = '📂 *Recent Recordings:*\n\n';
-      
+
       for (const record of records) {
         response += `📁 *${record.title}*\n`;
         response += `📅 ${record.date}\n`;
@@ -474,8 +474,8 @@ The bot will automatically download and store recordings for easy access!
     }
 
     this.app.get('/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
+      res.json({
+        status: 'ok',
         timestamp: new Date().toISOString(),
         mode: this.useWebhook ? 'webhook' : 'polling'
       });
@@ -487,7 +487,7 @@ The bot will automatically download and store recordings for easy access!
           .select()
           .from(zoomRecords)
           .orderBy(desc(zoomRecords.createdAt));
-        
+
         res.json(records);
       } catch (error) {
         res.status(500).json({ error: 'Database error' });
@@ -525,11 +525,14 @@ The bot will automatically download and store recordings for easy access!
       });
     }
 
-    // Create HTTP server
-    const server = createServer(this.app);
-    server.listen(this.port, () => {
+    this.app.listen(this.port, () => {
       console.log(`🚀 Bot server running on port ${this.port}`);
       console.log(`📡 Mode: ${this.useWebhook ? 'Webhook' : 'Polling'}`);
+    });
+  }
+
+  public start() {
+    console.log('🤖 Telegram Zoom Bot started!');
     console.log(`📡 Running in ${this.useWebhook ? 'webhook' : 'polling'} mode`);
     if (this.useWebhook && this.webhookUrl) {
       console.log(`🔗 Webhook URL: ${this.webhookUrl}`);
@@ -546,7 +549,7 @@ The bot will automatically download and store recordings for easy access!
     try {
       await this.setWebhook(this.webhookUrl);
       console.log('✅ Webhook set up successfully');
-      
+
       // Test webhook connectivity
       await this.testWebhookConnectivity();
     } catch (error) {
@@ -556,7 +559,7 @@ The bot will automatically download and store recordings for easy access!
 
   private async setWebhook(url: string): Promise<void> {
     const webhookUrl = `${url}/bot${this.botToken}`;
-    
+
     const result = await this.bot.setWebHook(webhookUrl, {
       max_connections: 100,
       allowed_updates: ['message', 'callback_query'],
@@ -573,10 +576,10 @@ The bot will automatically download and store recordings for easy access!
   private async testWebhookConnectivity(): Promise<void> {
     try {
       console.log('🧪 Testing webhook connectivity...');
-      
+
       // Test health endpoint
       const response = await fetch(`${this.webhookUrl}/health`);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Webhook endpoint is accessible:', data);
@@ -590,7 +593,7 @@ The bot will automatically download and store recordings for easy access!
 
   private async deleteWebhook(): Promise<void> {
     const result = await this.bot.deleteWebHook();
-    
+
     if (!result) {
       throw new Error('Failed to delete webhook');
     }
