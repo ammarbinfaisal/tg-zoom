@@ -110,6 +110,8 @@ class ZoomTelegramBot {
       .from(users)
       .where(eq(users.canUpload, "yes"));
 
+    console.log("Allowed uploaders loaded:", allowedUsers);
+
     this.allowedUploaders = new Set(allowedUsers.map(user => user.telegramId));
   }
 
