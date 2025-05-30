@@ -9,6 +9,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import crypto from 'crypto';
 import { users, zoomRecords } from './src/schema';
+import "dotenv/config";
 
 interface ZoomLinkData {
   title: string;
