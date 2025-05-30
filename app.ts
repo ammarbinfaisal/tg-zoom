@@ -29,7 +29,7 @@ class ZoomTelegramBot {
 
   constructor(
     private botToken: string,
-    private port: number = 3000,
+    private port: number = process.env.PORT ? parseInt(process.env.PORT) : 3000,
     private useWebhook: boolean = process.env.NODE_ENV === 'production',
     private webhookUrl?: string
   ) {
