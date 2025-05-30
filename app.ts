@@ -191,7 +191,7 @@ The bot will automatically download and store recordings for easy access!
       const targetUserId = match?.[1] ? parseInt(match[1]) : null;
 
       // Only allow bot admin (you can hardcode your telegram ID here)
-      if (userId !== 123456789) { // Replace with your telegram ID
+      if (userId !== parseInt(process.env.ADMIN_TELEGRAM_ID || 'YOUR_ADMIN_ID')) {
         await this.bot.sendMessage(chatId, '❌ Unauthorized');
         return;
       }
