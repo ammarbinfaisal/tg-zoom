@@ -1,14 +1,14 @@
 import express from 'express';
 import TelegramBot from 'node-telegram-bot-api';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
 import { eq, like, desc } from 'drizzle-orm';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import crypto from 'crypto';
 import { users, zoomRecords } from './src/schema';
-
-const execAsync = promisify(exec);
 
 interface ZoomLinkData {
   title: string;
@@ -17,6 +17,8 @@ interface ZoomLinkData {
   passcode: string;
 }
 
+const execAsync = promisify(exec);
+
 class ZoomTelegramBot {
   private bot: TelegramBot;
   private db: ReturnType<typeof drizzle>;
@@ -24,18 +26,68 @@ class ZoomTelegramBot {
   private downloadsDir: string;
   private allowedUploaders: Set<number> = new Set();
 
-  constructor(private botToken: string, private port: number = 3000) {
-    this.bot = new TelegramBot(botToken, { polling: true });
+  constructor(
+    private botToken: string, 
+    private port: number = 3000,
+    private useWebhook: boolean = process.env.NODE_ENV === 'production',
+    private webhookUrl?: string
+  ) {
+    // Initialize bot with polling or webhook based on environment
+    this.bot = new TelegramBot(botToken, { 
+      polling: !this.useWebhook,
+      webHook: this.useWebhook ? {
+        port: this.port,
+        host: '0.0.0.0'
+      } : false
+    });
+    
     this.app = express();
-    this.downloadsDir = path.join(process.cwd(), 'downloads');    
+    this.downloadsDir = path.join(__dirname, 'downloads');
+    
     this.initializeApp();
   }
 
   private async initializeApp() {
+    await this.initializeDatabase();
     await this.initializeDirectories();
     await this.loadAllowedUploaders();
     this.setupBotHandlers();
     this.setupWebServer();
+    
+    // Set up webhook if in production
+    if (this.useWebhook && this.webhookUrl) {
+      await this.setupWebhook();
+    }
+  }
+
+  private async initializeDatabase() {
+    const sqlite = new Database('zoom_bot.db');
+    this.db = drizzle(sqlite);
+
+    // Run migrations (you'll need to set up drizzle-kit for this)
+    // For now, we'll create tables manually
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id INTEGER UNIQUE NOT NULL,
+        username TEXT,
+        can_upload BOOLEAN DEFAULT FALSE,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS zoom_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        zoom_url TEXT NOT NULL,
+        passcode TEXT NOT NULL,
+        file_path TEXT,
+        file_id TEXT,
+        uploaded_by INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   }
 
   private async initializeDirectories() {
@@ -407,8 +459,20 @@ The bot will automatically download and store recordings for easy access!
   private setupWebServer() {
     this.app.use(express.json());
 
+    // Webhook endpoint for Telegram
+    if (this.useWebhook) {
+      this.app.post(`/bot${this.botToken}`, (req, res) => {
+        this.bot.processUpdate(req.body);
+        res.sendStatus(200);
+      });
+    }
+
     this.app.get('/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        mode: this.useWebhook ? 'webhook' : 'polling'
+      });
     });
 
     this.app.get('/recordings', async (req, res) => {
@@ -424,22 +488,125 @@ The bot will automatically download and store recordings for easy access!
       }
     });
 
+    // Webhook management endpoints
+    if (this.useWebhook) {
+      this.app.post('/webhook/set', async (req, res) => {
+        try {
+          const { url } = req.body;
+          await this.setWebhook(url);
+          res.json({ success: true, message: 'Webhook set successfully' });
+        } catch (error) {
+          res.status(500).json({ error: error.message });
+        }
+      });
+
+      this.app.post('/webhook/delete', async (req, res) => {
+        try {
+          await this.deleteWebhook();
+          res.json({ success: true, message: 'Webhook deleted successfully' });
+        } catch (error) {
+          res.status(500).json({ error: error.message });
+        }
+      });
+
+      this.app.get('/webhook/info', async (req, res) => {
+        try {
+          const info = await this.getWebhookInfo();
+          res.json(info);
+        } catch (error) {
+          res.status(500).json({ error: error.message });
+        }
+      });
+    }
+
     this.app.listen(this.port, () => {
       console.log(`🚀 Bot server running on port ${this.port}`);
+      console.log(`📡 Mode: ${this.useWebhook ? 'Webhook' : 'Polling'}`);
     });
   }
 
   public start() {
-
     console.log('🤖 Telegram Zoom Bot started!');
+    console.log(`📡 Running in ${this.useWebhook ? 'webhook' : 'polling'} mode`);
+    if (this.useWebhook && this.webhookUrl) {
+      console.log(`🔗 Webhook URL: ${this.webhookUrl}`);
+    }
+  }
+
+  // Webhook management methods
+  private async setupWebhook() {
+    if (!this.webhookUrl) {
+      console.error('❌ WEBHOOK_URL not provided');
+      return;
+    }
+
+    try {
+      await this.setWebhook(this.webhookUrl);
+      console.log('✅ Webhook set up successfully');
+      
+      // Test webhook connectivity
+      await this.testWebhookConnectivity();
+    } catch (error) {
+      console.error('❌ Failed to set up webhook:', error);
+    }
+  }
+
+  private async setWebhook(url: string): Promise<void> {
+    const webhookUrl = `${url}/bot${this.botToken}`;
+    
+    const result = await this.bot.setWebHook(webhookUrl, {
+      max_connections: 100,
+      allowed_updates: ['message', 'callback_query'],
+      secret_token: crypto.randomBytes(32).toString('hex').substring(0, 32) // Optional: for additional security
+    });
+
+    if (!result) {
+      throw new Error('Failed to set webhook');
+    }
+
+    console.log(`✅ Webhook set to: ${webhookUrl}`);
+  }
+
+  private async testWebhookConnectivity(): Promise<void> {
+    try {
+      console.log('🧪 Testing webhook connectivity...');
+      
+      // Test health endpoint
+      const response = await fetch(`${this.webhookUrl}/health`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Webhook endpoint is accessible:', data);
+      } else {
+        console.log('⚠️ Webhook endpoint returned:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('❌ Webhook connectivity test failed:', error.message);
+    }
+  }
+
+  private async deleteWebhook(): Promise<void> {
+    const result = await this.bot.deleteWebHook();
+    
+    if (!result) {
+      throw new Error('Failed to delete webhook');
+    }
+
+    console.log('✅ Webhook deleted successfully');
+  }
+
+  private async getWebhookInfo(): Promise<any> {
+    return await this.bot.getWebHookInfo();
   }
 }
 
 // Usage
 const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
 const PORT = parseInt(process.env.PORT || '3000');
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const USE_WEBHOOK = process.env.NODE_ENV === 'production';
 
-const bot = new ZoomTelegramBot(BOT_TOKEN, PORT);
+const bot = new ZoomTelegramBot(BOT_TOKEN, PORT, USE_WEBHOOK, WEBHOOK_URL);
 bot.start();
 
 export default ZoomTelegramBot;
