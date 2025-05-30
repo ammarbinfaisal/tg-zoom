@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatDate, formatFileSize } from '@/lib/utils';
+import { useParams } from 'next/navigation';
 
 interface Recording {
   id: number;
@@ -17,7 +18,8 @@ interface Recording {
   createdAt: string;
 }
 
-export default function RecordingDetailPage({ params }: { params: { id: string } }) {
+export default function RecordingDetailPage() {
+  const params = useParams() as { id: string };
   const [recording, setRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
