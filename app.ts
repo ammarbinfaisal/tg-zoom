@@ -238,7 +238,7 @@ The bot will automatically download and store recordings for easy access!
   }
 
   private parseZoomMessage(text: string): ZoomLinkData | null {
-    const lines = text.split('\n').map(line => line.trim());
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     let title = '';
     let date = '';
@@ -249,25 +249,33 @@ The bot will automatically download and store recordings for easy access!
       const line = lines[i];
 
       // First non-empty line is usually the title
-      if (!title && line && !line.includes('Date:') && !line.includes('Duration:') && !line.includes('http')) {
+      if (!title && line && !line.includes('Date:') && !line.includes('Duration:') && !line.includes('http') && !line.includes('View Detail') && !line.includes('Share Link')) {
         title = line;
       }
 
       // Look for date
       if (line.includes('Date:')) {
-        date = line.replace('Date:', '').trim();
+        // Extract date part, handling multiple formats
+        const dateMatch = line.match(/Date:\s*(.*?)(?:\s+Duration|\s*$)/i);
+        date = dateMatch ? dateMatch[1].trim() : line.replace('Date:', '').trim();
       }
 
-      // Look for Zoom URL
+      // Look for Zoom URL - check for zoom.us in any part of the line
       if (line.includes('zoom.us')) {
-        url = line;
+        // Extract just the URL part
+        const urlMatch = line.match(/(https?:\/\/[^\s]+zoom\.us[^\s]+)/i);
+        url = urlMatch ? urlMatch[0] : line;
       }
 
-      // Look for passcode
+      // Look for passcode - handle period at the end
       if (line.includes('Passcode:') || line.includes('Password:')) {
-        passcode = line.split(':')[1]?.trim() || '';
+        const passcodePart = line.split(':')[1]?.trim() || '';
+        // Remove trailing period if present
+        passcode = passcodePart.endsWith('.') ? passcodePart.slice(0, -1) : passcodePart;
       }
     }
+
+    console.log('Parsed Zoom data:', { title, date, url, passcode });
 
     if (url && passcode) {
       return {
@@ -286,16 +294,29 @@ The bot will automatically download and store recordings for easy access!
     const userId = msg.from?.id;
     const text = msg.text;
 
-    if (!userId || !text) return;
+    if (!userId || !text) {
+      console.log('Skipping message: missing userId or text');
+      return;
+    }
+
+    console.log(`Processing message from user ${userId}:`);
+    console.log('---MESSAGE START---');
+    console.log(text);
+    console.log('---MESSAGE END---');
 
     // Check if user can upload
     if (!this.allowedUploaders.has(userId)) {
+      console.log(`User ${userId} is not authorized to upload`);
       return; // Silently ignore non-uploaders
     }
 
     const zoomData = this.parseZoomMessage(text);
-    if (!zoomData) return;
+    if (!zoomData) {
+      console.log('Failed to parse Zoom data from message');
+      return;
+    }
 
+    console.log('Successfully parsed Zoom data:', zoomData);
     await this.bot.sendMessage(chatId, '🔍 Zoom link detected! Starting download...');
 
     try {
