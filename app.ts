@@ -206,6 +206,7 @@ The bot will automatically download and store recordings for easy access!
     // Handle Zoom link messages
     this.bot.on('message', async (msg) => {
       if (msg.text && !msg.text.startsWith('/')) {
+        console.log(`Received message from ${msg.from?.id}: ${msg.text}`);
         await this.handlePotentialZoomLink(msg);
       }
     });
