@@ -115,6 +115,7 @@ class ZoomTelegramBot {
       const username = msg.from?.username;
 
       if (userId) {
+        console.log(`User ${userId} started the bot`);
         await this.registerUser(userId, username);
       }
 
